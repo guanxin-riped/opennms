@@ -79,6 +79,7 @@ import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
 import org.snmp4j.smi.IpAddress;
 import org.snmp4j.smi.OID;
+import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.SMIConstants;
 import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
@@ -113,8 +114,8 @@ public class Snmp4JStrategy implements SnmpStrategy {
 
         SNMP4JSettings.setEnterpriseID(5813);
         //USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()), 0);
-        m_usm = new USM();
-        SecurityModels.getInstance().addSecurityModel(m_usm);
+        //m_usm = new USM();
+        //SecurityModels.getInstance().addSecurityModel(m_usm);
         
         // Enable extensibility in SNMP4J so that we can subclass some SMI classes to work around
         // agent bugs
@@ -131,7 +132,7 @@ public class Snmp4JStrategy implements SnmpStrategy {
 
         // NMS-9223: This call can be expensive, and is synchronized
         // so we perform it only once during initialization
-        SecurityProtocols.getInstance().addDefaultProtocols();
+        //SecurityProtocols.getInstance().addDefaultProtocols();
 
         s_initialized = true;
     }
@@ -540,6 +541,15 @@ public class Snmp4JStrategy implements SnmpStrategy {
                         agentConfig.getPrivProtocol(),
                         agentConfig.getPrivPassPhrase()
                 );
+                final USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()),
+                        0);
+                usm.addUser(agentConfig.getSecurityName(), usmUser);
+                MessageProcessingModel oldModel = snmp.getMessageDispatcher()
+                        .getMessageProcessingModel(MessageProcessingModel.MPv3);
+                if (oldModel != null) {
+                    snmp.getMessageDispatcher().removeMessageProcessingModel(oldModel);
+                }
+                snmp.getMessageDispatcher().addMessageProcessingModel(new MPv3(usm));
                 /* This doesn't work as expected. Basically SNMP4J is ignoring the engineId
                 if (user.getEngineId() == null) {
                     snmp.getUSM().addUser(agentConfig.getSecurityName(), usmUser);
@@ -547,7 +557,7 @@ public class Snmp4JStrategy implements SnmpStrategy {
                     snmp.getUSM().addUser(agentConfig.getSecurityName(), new OctetString(user.getEngineId()), usmUser);
                 }
                 */
-                snmp.getUSM().addUser(agentConfig.getSecurityName(), usmUser);
+                //snmp.getUSM().addUser(agentConfig.getSecurityName(), usmUser);
             }
         }
 
