@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -73,7 +74,6 @@ import org.snmp4j.mp.MessageProcessingModel;
 import org.snmp4j.mp.PduHandle;
 import org.snmp4j.security.SecurityLevel;
 import org.snmp4j.security.SecurityModel;
-import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
@@ -113,9 +113,6 @@ public class Snmp4JStrategy implements SnmpStrategy {
         }
 
         SNMP4JSettings.setEnterpriseID(5813);
-        //USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()), 0);
-        //m_usm = new USM();
-        //SecurityModels.getInstance().addSecurityModel(m_usm);
         
         // Enable extensibility in SNMP4J so that we can subclass some SMI classes to work around
         // agent bugs
@@ -129,10 +126,6 @@ public class Snmp4JStrategy implements SnmpStrategy {
         
         SNMP4JSettings.setAllowSNMPv2InV1(Boolean.getBoolean("org.opennms.snmp.snmp4j.allowSNMPv2InV1"));
         SNMP4JSettings.setNoGetBulk(Boolean.getBoolean("org.opennms.snmp.snmp4j.noGetBulk"));
-
-        // NMS-9223: This call can be expensive, and is synchronized
-        // so we perform it only once during initialization
-        //SecurityProtocols.getInstance().addDefaultProtocols();
 
         s_initialized = true;
     }
@@ -524,45 +517,37 @@ public class Snmp4JStrategy implements SnmpStrategy {
         Snmp snmp = new Snmp(transport);
         snmp.addCommandResponder(trapNotifier);
 
-        if (snmpUsers != null) {
-            for (SnmpV3User user : snmpUsers) {
-                SnmpAgentConfig config = new SnmpAgentConfig();
-                config.setVersion(SnmpConfiguration.VERSION3);
-                config.setSecurityName(user.getSecurityName());
-                config.setAuthProtocol(user.getAuthProtocol());
-                config.setAuthPassPhrase(user.getAuthPassPhrase());
-                config.setPrivProtocol(user.getPrivProtocol());
-                config.setPrivPassPhrase(user.getPrivPassPhrase());
-                Snmp4JAgentConfig agentConfig = new Snmp4JAgentConfig(config);
-                UsmUser usmUser = new UsmUser(
-                        agentConfig.getSecurityName(),
-                        agentConfig.getAuthProtocol(),
-                        agentConfig.getAuthPassPhrase(),
-                        agentConfig.getPrivProtocol(),
-                        agentConfig.getPrivPassPhrase()
-                );
-                final USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()),
-                        0);
-                usm.addUser(agentConfig.getSecurityName(), usmUser);
-                MessageProcessingModel oldModel = snmp.getMessageDispatcher()
-                        .getMessageProcessingModel(MessageProcessingModel.MPv3);
-                if (oldModel != null) {
-                    snmp.getMessageDispatcher().removeMessageProcessingModel(oldModel);
-                }
-                snmp.getMessageDispatcher().addMessageProcessingModel(new MPv3(usm));
-                /* This doesn't work as expected. Basically SNMP4J is ignoring the engineId
-                if (user.getEngineId() == null) {
-                    snmp.getUSM().addUser(agentConfig.getSecurityName(), usmUser);
-                } else {
-                    snmp.getUSM().addUser(agentConfig.getSecurityName(), new OctetString(user.getEngineId()), usmUser);
-                }
-                */
-                //snmp.getUSM().addUser(agentConfig.getSecurityName(), usmUser);
-            }
+        //Create a new USM when registering the snmp listener
+        final USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()),0);
+
+        for (SnmpV3User user : snmpUsers) {
+            SnmpAgentConfig config = new SnmpAgentConfig();
+            config.setVersion(SnmpConfiguration.VERSION3);
+            config.setSecurityName(user.getSecurityName());
+            config.setAuthProtocol(user.getAuthProtocol());
+            config.setAuthPassPhrase(user.getAuthPassPhrase());
+            config.setPrivProtocol(user.getPrivProtocol());
+            config.setPrivPassPhrase(user.getPrivPassPhrase());
+            Snmp4JAgentConfig agentConfig = new Snmp4JAgentConfig(config);
+            UsmUser usmUser = new UsmUser(agentConfig.getSecurityName(), agentConfig.getAuthProtocol(),
+                    agentConfig.getAuthPassPhrase(), agentConfig.getPrivProtocol(), agentConfig.getPrivPassPhrase());
+            usm.addUser(agentConfig.getSecurityName(), usmUser);
+            /*This doesn't work as expected. Basically SNMP4J is ignoring the engineId
+            if (user.getEngineId() == null) {
+                snmp.getUSM().addUser(agentConfig.getSecurityName(), usmUser);
+            } else {
+                snmp.getUSM().addUser(agentConfig.getSecurityName(), new OctetString(user.getEngineId()), usmUser);
+            }*/
+
         }
 
+        MessageProcessingModel oldModel = snmp.getMessageDispatcher()
+                .getMessageProcessingModel(MessageProcessingModel.MPv3);
+        if (oldModel != null) {
+            snmp.getMessageDispatcher().removeMessageProcessingModel(oldModel);
+        }
+        snmp.getMessageDispatcher().addMessageProcessingModel(new MPv3(usm));
         info.setSession(snmp);
-        
         s_registrations.put(listener, info);
         
         snmp.listen();
@@ -570,7 +555,7 @@ public class Snmp4JStrategy implements SnmpStrategy {
     
     @Override
     public void registerForTraps(final TrapNotificationListener listener, InetAddress address, int snmpTrapPort) throws IOException {
-        registerForTraps(listener, address, snmpTrapPort, null);
+        registerForTraps(listener, address, snmpTrapPort, new ArrayList<>());
     }
 
     @Override
