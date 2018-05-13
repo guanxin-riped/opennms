@@ -49,6 +49,7 @@ public abstract class SnmpUtils {
 
     private static Properties sm_config;
     private static StrategyResolver s_strategyResolver;
+    private static SnmpStrategy s_snmpStrategy;
 
     private static final class TooBigReportingAggregator extends AggregateTracker {
         private final InetAddress address;
@@ -150,13 +151,22 @@ public abstract class SnmpUtils {
     public static void setConfig(Properties config) {
         sm_config = config;
     }
-    
+
     public static SnmpStrategy getStrategy() {
-    	return getStrategyResolver().getStrategy();
+        if (s_snmpStrategy != null) {
+            return s_snmpStrategy;
+        }
+        try {
+            s_snmpStrategy = s_classBasedStrategyResolver.getStrategy();
+        } catch (Exception e) {
+            s_snmpStrategy = getStrategyResolver().getStrategy();
+            LOG.info("Couldn't initialize classBasedStrategy, using serviceBased SmpStrategy");
+        }
+        return s_snmpStrategy;
     }
 
     public static StrategyResolver getStrategyResolver() {
-    	return s_strategyResolver != null ? s_strategyResolver : s_classBasedStrategyResolver;
+        return s_strategyResolver != null ? s_strategyResolver : s_classBasedStrategyResolver;
     }
 
     public static void setStrategyResolver(StrategyResolver strategyResolver) {
