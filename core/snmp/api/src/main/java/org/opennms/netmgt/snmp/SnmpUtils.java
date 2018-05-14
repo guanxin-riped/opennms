@@ -50,6 +50,7 @@ public abstract class SnmpUtils {
 
     private static Properties sm_config;
     private static StrategyResolver s_strategyResolver;
+    private static final boolean canUseClassBasedStrategy = checkIfClassBasedStrategyIsInstantiable();
 
     private static final class TooBigReportingAggregator extends AggregateTracker {
         private final InetAddress address;
@@ -155,7 +156,19 @@ public abstract class SnmpUtils {
     }
     
     public static SnmpStrategy getStrategy() {
-    	return getStrategyResolver().getStrategy();
+        if (canUseClassBasedStrategy) {
+            return s_classBasedStrategyResolver.getStrategy();
+        }
+        return getStrategyResolver().getStrategy();
+    }
+
+    public static boolean checkIfClassBasedStrategyIsInstantiable() {
+        try {
+            s_classBasedStrategyResolver.getStrategy();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public static StrategyResolver getStrategyResolver() {
